@@ -1,0 +1,30 @@
+{
+  "name": "fastmail-calendar-mcp",
+  "version": "1.0.0",
+  "description": "MCP server for Fastmail Calendar via CalDAV",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/index.js"
+  },
+  "keywords": [
+    "mcp",
+    "fastmail",
+    "caldav",
+    "calendar"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.0.4",
+    "caldav-client": "^0.1.0",
+    "tsdav": "^2.0.6",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}
