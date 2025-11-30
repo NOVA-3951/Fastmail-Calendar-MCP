@@ -3,13 +3,19 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
+  ListPromptsRequestSchema,
+  GetPromptRequestSchema,
+  ListResourcesRequestSchema,
+  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from "tsdav";
 
 export const configSchema = z.object({
   username: z.string().min(1, "Username is required").email("Must be a valid email address").describe("Fastmail email address (e.g., user@fastmail.com)"),
-  appPassword: z.string().min(16, "App password must be at least 16 characters").describe("Fastmail app password (16 characters)"),
+  appPassword: z.string().min(16, "App password must be at least 16 characters").describe("Fastmail app password (16 characters). Create one at Settings → Privacy & Security → Integrations → New app password"),
+  defaultCalendar: z.string().optional().describe("Default calendar name to use when not specified (optional)"),
+  timezone: z.string().optional().describe("Default timezone for events, e.g., 'America/New_York' (optional)"),
 });
 
 type Config = z.infer<typeof configSchema>;
@@ -24,6 +30,8 @@ function createServer({ config }: { config: Config }) {
     {
       capabilities: {
         tools: {},
+        prompts: {},
+        resources: {},
       },
     }
   );
@@ -48,122 +56,355 @@ function createServer({ config }: { config: Config }) {
     return davClient;
   }
 
+  server.setRequestHandler(ListPromptsRequestSchema, async () => ({
+    prompts: [
+      {
+        name: "schedule_meeting",
+        description: "Help schedule a new meeting or appointment on your calendar",
+        arguments: [
+          {
+            name: "topic",
+            description: "The topic or purpose of the meeting",
+            required: true,
+          },
+          {
+            name: "duration",
+            description: "How long the meeting should be (e.g., '30 minutes', '1 hour')",
+            required: false,
+          },
+        ],
+      },
+      {
+        name: "daily_agenda",
+        description: "Get your agenda for today or a specific date",
+        arguments: [
+          {
+            name: "date",
+            description: "The date to check (defaults to today if not specified)",
+            required: false,
+          },
+        ],
+      },
+      {
+        name: "find_free_time",
+        description: "Find available time slots in your calendar",
+        arguments: [
+          {
+            name: "duration",
+            description: "How much free time you need (e.g., '1 hour', '30 minutes')",
+            required: true,
+          },
+          {
+            name: "within_days",
+            description: "Number of days to search ahead (default: 7)",
+            required: false,
+          },
+        ],
+      },
+      {
+        name: "weekly_summary",
+        description: "Get a summary of your upcoming week's schedule",
+        arguments: [],
+      },
+    ],
+  }));
+
+  server.setRequestHandler(GetPromptRequestSchema, async (request) => {
+    const { name, arguments: args } = request.params;
+
+    switch (name) {
+      case "schedule_meeting":
+        return {
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Help me schedule a meeting about "${args?.topic || 'a topic'}". ${args?.duration ? `It should be ${args.duration} long.` : ''} 
+                
+First, use list_calendars to see available calendars, then help me create the event with create_event. Ask me for the date and time if I haven't specified them.`,
+              },
+            },
+          ],
+        };
+
+      case "daily_agenda":
+        const agendaDate = args?.date || new Date().toISOString().split('T')[0];
+        return {
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Show me my agenda for ${agendaDate}. 
+
+Use list_calendars to get my calendars, then use list_events with the date range for that day to show all my events. Format them nicely with times and titles.`,
+              },
+            },
+          ],
+        };
+
+      case "find_free_time":
+        return {
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Help me find ${args?.duration || 'some'} free time in my calendar over the next ${args?.within_days || '7'} days.
+
+Use list_calendars and list_events to check my schedule, then identify gaps where I'm free. Present the available slots clearly.`,
+              },
+            },
+          ],
+        };
+
+      case "weekly_summary":
+        const today = new Date();
+        const nextWeek = new Date(today);
+        nextWeek.setDate(nextWeek.getDate() + 7);
+        return {
+          messages: [
+            {
+              role: "user",
+              content: {
+                type: "text",
+                text: `Give me a summary of my schedule for the next 7 days (${today.toISOString().split('T')[0]} to ${nextWeek.toISOString().split('T')[0]}).
+
+Use list_calendars and list_events to fetch my events, then organize them by day and provide a helpful overview.`,
+              },
+            },
+          ],
+        };
+
+      default:
+        throw new Error(`Unknown prompt: ${name}`);
+    }
+  });
+
+  server.setRequestHandler(ListResourcesRequestSchema, async () => {
+    await initializeClient();
+    
+    return {
+      resources: calendars.map((cal) => ({
+        uri: `calendar://${encodeURIComponent(cal.url)}`,
+        name: cal.displayName || "Unnamed Calendar",
+        description: cal.description || `Calendar: ${cal.displayName}`,
+        mimeType: "application/json",
+      })),
+    };
+  });
+
+  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
+    const { uri } = request.params;
+    
+    await initializeClient();
+
+    if (uri.startsWith("calendar://")) {
+      const calendarUrl = decodeURIComponent(uri.replace("calendar://", ""));
+      const calendar = calendars.find((cal) => cal.url === calendarUrl);
+      
+      if (!calendar) {
+        throw new Error(`Calendar not found: ${calendarUrl}`);
+      }
+
+      const now = new Date();
+      const thirtyDaysLater = new Date(now);
+      thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
+
+      const calendarObjects = await davClient.fetchCalendarObjects({
+        calendar,
+        timeRange: {
+          start: now.toISOString(),
+          end: thirtyDaysLater.toISOString(),
+        },
+      });
+
+      const events = calendarObjects.map((obj: DAVCalendarObject) => ({
+        url: obj.url,
+        etag: obj.etag,
+        data: obj.data,
+      }));
+
+      return {
+        contents: [
+          {
+            uri,
+            mimeType: "application/json",
+            text: JSON.stringify({
+              calendar: {
+                displayName: calendar.displayName,
+                url: calendar.url,
+                description: calendar.description,
+                timezone: calendar.timezone,
+              },
+              events,
+              eventCount: events.length,
+              dateRange: {
+                start: now.toISOString(),
+                end: thirtyDaysLater.toISOString(),
+              },
+            }, null, 2),
+          },
+        ],
+      };
+    }
+
+    throw new Error(`Unknown resource URI: ${uri}`);
+  });
+
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
     tools: [
       {
         name: "list_calendars",
-        description: "List all available calendars in the Fastmail account",
+        description: "List all available calendars in the Fastmail account. Returns calendar names, URLs, descriptions, and timezones. Use this first to discover available calendars before performing other operations.",
         inputSchema: {
           type: "object",
           properties: {},
+          required: [],
+        },
+        annotations: {
+          title: "List Calendars",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
         },
       },
       {
         name: "list_events",
-        description: "List calendar events from a specific calendar within a date range",
+        description: "List calendar events from a specific calendar within a date range. Returns event URLs, etags (needed for updates/deletes), and iCalendar data containing event details.",
         inputSchema: {
           type: "object",
           properties: {
             calendarUrl: {
               type: "string",
-              description: "The URL of the calendar to query (from list_calendars)",
+              description: "The URL of the calendar to query. Get this from list_calendars output.",
             },
             startDate: {
               type: "string",
-              description: "Start date in ISO format (e.g., 2024-01-01)",
+              description: "Start date for the query range in ISO format (e.g., '2024-01-01' or '2024-01-01T09:00:00Z')",
             },
             endDate: {
               type: "string",
-              description: "End date in ISO format (e.g., 2024-12-31)",
+              description: "End date for the query range in ISO format (e.g., '2024-12-31' or '2024-12-31T17:00:00Z')",
             },
           },
           required: ["calendarUrl", "startDate", "endDate"],
         },
+        annotations: {
+          title: "List Events",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       },
       {
         name: "create_event",
-        description: "Create a new calendar event",
+        description: "Create a new calendar event with the specified details. The event will be added to the specified calendar.",
         inputSchema: {
           type: "object",
           properties: {
             calendarUrl: {
               type: "string",
-              description: "The URL of the calendar where the event will be created",
+              description: "The URL of the calendar where the event will be created. Get this from list_calendars output.",
             },
             summary: {
               type: "string",
-              description: "Event title/summary",
+              description: "The title or name of the event (e.g., 'Team Meeting', 'Doctor Appointment')",
             },
             description: {
               type: "string",
-              description: "Event description (optional)",
+              description: "Detailed description or notes for the event (optional)",
             },
             startDate: {
               type: "string",
-              description: "Event start date and time in ISO format",
+              description: "Event start date and time in ISO format (e.g., '2024-06-15T10:00:00Z')",
             },
             endDate: {
               type: "string",
-              description: "Event end date and time in ISO format",
+              description: "Event end date and time in ISO format (e.g., '2024-06-15T11:00:00Z'). Must be after startDate.",
             },
             location: {
               type: "string",
-              description: "Event location (optional)",
+              description: "Physical or virtual location of the event (e.g., 'Conference Room A', 'https://zoom.us/j/123') (optional)",
             },
           },
           required: ["calendarUrl", "summary", "startDate", "endDate"],
         },
+        annotations: {
+          title: "Create Event",
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: false,
+          openWorldHint: false,
+        },
       },
       {
         name: "update_event",
-        description: "Update an existing calendar event",
+        description: "Update an existing calendar event. Only the fields you provide will be changed; other fields remain unchanged.",
         inputSchema: {
           type: "object",
           properties: {
             eventUrl: {
               type: "string",
-              description: "The URL of the event to update",
+              description: "The URL of the event to update. Get this from list_events output.",
             },
             summary: {
               type: "string",
-              description: "New event title/summary (optional)",
+              description: "New title or name for the event (optional - only include to change)",
             },
             description: {
               type: "string",
-              description: "New event description (optional)",
+              description: "New description or notes for the event (optional - only include to change)",
             },
             startDate: {
               type: "string",
-              description: "New event start date and time in ISO format (optional)",
+              description: "New start date and time in ISO format (optional - only include to change)",
             },
             endDate: {
               type: "string",
-              description: "New event end date and time in ISO format (optional)",
+              description: "New end date and time in ISO format (optional - only include to change)",
             },
             location: {
               type: "string",
-              description: "New event location (optional)",
+              description: "New location for the event (optional - only include to change)",
             },
           },
           required: ["eventUrl"],
         },
+        annotations: {
+          title: "Update Event",
+          readOnlyHint: false,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
       },
       {
         name: "delete_event",
-        description: "Delete a calendar event",
+        description: "Permanently delete a calendar event. This action cannot be undone. Requires both the event URL and its etag for verification.",
         inputSchema: {
           type: "object",
           properties: {
             eventUrl: {
               type: "string",
-              description: "The URL of the event to delete",
+              description: "The URL of the event to delete. Get this from list_events output.",
             },
             etag: {
               type: "string",
-              description: "The etag of the event (from list_events)",
+              description: "The etag of the event for concurrency control. Get this from list_events output.",
             },
           },
           required: ["eventUrl", "etag"],
+        },
+        annotations: {
+          title: "Delete Event",
+          readOnlyHint: false,
+          destructiveHint: true,
+          idempotentHint: true,
+          openWorldHint: false,
         },
       },
     ],
