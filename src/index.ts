@@ -257,7 +257,7 @@ Use list_calendars and list_events to fetch my events, then organize them by day
     tools: [
       {
         name: "list_calendars",
-        description: "List all available calendars in the Fastmail account. Returns calendar names, URLs, descriptions, and timezones. Use this first to discover available calendars before performing other operations.",
+        description: `STEP 1 - ALWAYS CALL THIS FIRST. Lists all calendars in the user's Fastmail account. Returns an array of calendars with displayName (human-readable name like "Work", "Personal", "Family"), url (required for other operations), and timezone. You MUST call this before list_events, create_event, update_event, or delete_event to get the calendar URL. Look at the displayName to identify which calendar the user wants (e.g., "Work" for work schedule, "Personal" for personal events).`,
         inputSchema: {
           type: "object",
           properties: {},
@@ -273,21 +273,21 @@ Use list_calendars and list_events to fetch my events, then organize them by day
       },
       {
         name: "list_events",
-        description: "List calendar events from a specific calendar within a date range. Returns event URLs, etags (needed for updates/deletes), and iCalendar data containing event details.",
+        description: `STEP 2 - Get events from a calendar. PREREQUISITE: You must first call list_calendars to get the calendarUrl. Returns events within the specified date range. Each event contains: url (needed for update/delete), etag (needed for delete), and data (iCalendar format with SUMMARY=title, DTSTART=start time, DTEND=end time, LOCATION, DESCRIPTION). Parse the iCalendar data to show event details to the user.`,
         inputSchema: {
           type: "object",
           properties: {
             calendarUrl: {
               type: "string",
-              description: "The URL of the calendar to query. Get this from list_calendars output.",
+              description: "REQUIRED. The calendar URL from list_calendars output. Example: 'https://caldav.fastmail.com/dav/calendars/user/example@fastmail.com/default/'",
             },
             startDate: {
               type: "string",
-              description: "Start date for the query range in ISO format (e.g., '2024-01-01' or '2024-01-01T09:00:00Z')",
+              description: "REQUIRED. Start of date range in ISO format. For today: use current date. Example: '2024-12-01' or '2024-12-01T00:00:00Z'",
             },
             endDate: {
               type: "string",
-              description: "End date for the query range in ISO format (e.g., '2024-12-31' or '2024-12-31T17:00:00Z')",
+              description: "REQUIRED. End of date range in ISO format. For a single day, use the next day. Example: '2024-12-02' or '2024-12-31T23:59:59Z'",
             },
           },
           required: ["calendarUrl", "startDate", "endDate"],
@@ -302,33 +302,33 @@ Use list_calendars and list_events to fetch my events, then organize them by day
       },
       {
         name: "create_event",
-        description: "Create a new calendar event with the specified details. The event will be added to the specified calendar.",
+        description: `Create a new calendar event. PREREQUISITE: You must first call list_calendars to get the calendarUrl. Creates an event with the specified title, times, and optional description/location.`,
         inputSchema: {
           type: "object",
           properties: {
             calendarUrl: {
               type: "string",
-              description: "The URL of the calendar where the event will be created. Get this from list_calendars output.",
+              description: "REQUIRED. The calendar URL from list_calendars output where the event will be created.",
             },
             summary: {
               type: "string",
-              description: "The title or name of the event (e.g., 'Team Meeting', 'Doctor Appointment')",
+              description: "REQUIRED. The event title. Example: 'Team Meeting', 'Doctor Appointment', 'Lunch with Sarah'",
             },
             description: {
               type: "string",
-              description: "Detailed description or notes for the event (optional)",
+              description: "Optional. Detailed notes or agenda for the event.",
             },
             startDate: {
               type: "string",
-              description: "Event start date and time in ISO format (e.g., '2024-06-15T10:00:00Z')",
+              description: "REQUIRED. Event start in ISO format. Example: '2024-12-15T10:00:00Z' for 10 AM UTC",
             },
             endDate: {
               type: "string",
-              description: "Event end date and time in ISO format (e.g., '2024-06-15T11:00:00Z'). Must be after startDate.",
+              description: "REQUIRED. Event end in ISO format. Must be after startDate. Example: '2024-12-15T11:00:00Z' for 11 AM UTC",
             },
             location: {
               type: "string",
-              description: "Physical or virtual location of the event (e.g., 'Conference Room A', 'https://zoom.us/j/123') (optional)",
+              description: "Optional. Where the event takes place. Example: 'Conference Room A', 'https://zoom.us/j/123', '123 Main St'",
             },
           },
           required: ["calendarUrl", "summary", "startDate", "endDate"],
@@ -343,33 +343,33 @@ Use list_calendars and list_events to fetch my events, then organize them by day
       },
       {
         name: "update_event",
-        description: "Update an existing calendar event. Only the fields you provide will be changed; other fields remain unchanged.",
+        description: `Modify an existing event. PREREQUISITE: You must first call list_calendars, then list_events to get the eventUrl. Only include fields you want to change; omitted fields stay the same.`,
         inputSchema: {
           type: "object",
           properties: {
             eventUrl: {
               type: "string",
-              description: "The URL of the event to update. Get this from list_events output.",
+              description: "REQUIRED. The event URL from list_events output. Example: 'https://caldav.fastmail.com/dav/calendars/user/.../event.ics'",
             },
             summary: {
               type: "string",
-              description: "New title or name for the event (optional - only include to change)",
+              description: "Optional. New title for the event.",
             },
             description: {
               type: "string",
-              description: "New description or notes for the event (optional - only include to change)",
+              description: "Optional. New description/notes for the event.",
             },
             startDate: {
               type: "string",
-              description: "New start date and time in ISO format (optional - only include to change)",
+              description: "Optional. New start time in ISO format.",
             },
             endDate: {
               type: "string",
-              description: "New end date and time in ISO format (optional - only include to change)",
+              description: "Optional. New end time in ISO format.",
             },
             location: {
               type: "string",
-              description: "New location for the event (optional - only include to change)",
+              description: "Optional. New location for the event.",
             },
           },
           required: ["eventUrl"],
@@ -384,17 +384,17 @@ Use list_calendars and list_events to fetch my events, then organize them by day
       },
       {
         name: "delete_event",
-        description: "Permanently delete a calendar event. This action cannot be undone. Requires both the event URL and its etag for verification.",
+        description: `PERMANENTLY DELETE an event. PREREQUISITE: You must first call list_calendars, then list_events to get both the eventUrl AND etag. WARNING: This cannot be undone. Always confirm with the user before deleting.`,
         inputSchema: {
           type: "object",
           properties: {
             eventUrl: {
               type: "string",
-              description: "The URL of the event to delete. Get this from list_events output.",
+              description: "REQUIRED. The event URL from list_events output.",
             },
             etag: {
               type: "string",
-              description: "The etag of the event for concurrency control. Get this from list_events output.",
+              description: "REQUIRED. The etag from list_events output. This prevents accidentally deleting a modified event.",
             },
           },
           required: ["eventUrl", "etag"],
