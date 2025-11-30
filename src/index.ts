@@ -8,8 +8,8 @@ import { z } from "zod";
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from "tsdav";
 
 export const configSchema = z.object({
-  username: z.string().describe("Fastmail email address (e.g., user@fastmail.com)"),
-  appPassword: z.string().describe("Fastmail app password (16 characters)"),
+  username: z.string().min(1, "Username is required").email("Must be a valid email address").describe("Fastmail email address (e.g., user@fastmail.com)"),
+  appPassword: z.string().min(16, "App password must be at least 16 characters").describe("Fastmail app password (16 characters)"),
 });
 
 type Config = z.infer<typeof configSchema>;
@@ -212,6 +212,16 @@ function createServer(options: McpServerOptions = {}) {
             throw new Error(`Calendar not found: ${calendarUrl}`);
           }
 
+          const start = new Date(startDate);
+          if (isNaN(start.getTime())) {
+            throw new Error(`Invalid start date: ${startDate}`);
+          }
+
+          const end = new Date(endDate);
+          if (isNaN(end.getTime())) {
+            throw new Error(`Invalid end date: ${endDate}`);
+          }
+
           const calendarObjects = await davClient.fetchCalendarObjects({
             calendar,
             timeRange: {
@@ -259,7 +269,19 @@ function createServer(options: McpServerOptions = {}) {
           }
 
           const start = new Date(startDate);
+          if (isNaN(start.getTime())) {
+            throw new Error(`Invalid start date: ${startDate}`);
+          }
+
           const end = new Date(endDate);
+          if (isNaN(end.getTime())) {
+            throw new Error(`Invalid end date: ${endDate}`);
+          }
+
+          if (end <= start) {
+            throw new Error("End date must be after start date");
+          }
+
           const uid = `${Date.now()}@fastmail-mcp`;
 
           const icalString = [
@@ -313,13 +335,21 @@ function createServer(options: McpServerOptions = {}) {
             location?: string;
           };
 
-          const existingEvents = await davClient.fetchCalendarObjects({
-            calendar: calendars[0],
-          });
+          let existingEvent: DAVCalendarObject | undefined;
 
-          const existingEvent = existingEvents.find(
-            (e: DAVCalendarObject) => e.url === eventUrl
-          );
+          for (const calendar of calendars) {
+            const events = await davClient.fetchCalendarObjects({
+              calendar,
+            });
+
+            existingEvent = events.find(
+              (e: DAVCalendarObject) => e.url === eventUrl
+            );
+
+            if (existingEvent) {
+              break;
+            }
+          }
 
           if (!existingEvent) {
             throw new Error(`Event not found: ${eventUrl}`);
@@ -364,6 +394,9 @@ function createServer(options: McpServerOptions = {}) {
 
           if (startDate) {
             const start = new Date(startDate);
+            if (isNaN(start.getTime())) {
+              throw new Error(`Invalid start date: ${startDate}`);
+            }
             updatedIcal = updatedIcal.replace(
               /DTSTART:.*\r?\n/,
               `DTSTART:${formatICalDate(start)}\r\n`
@@ -372,6 +405,9 @@ function createServer(options: McpServerOptions = {}) {
 
           if (endDate) {
             const end = new Date(endDate);
+            if (isNaN(end.getTime())) {
+              throw new Error(`Invalid end date: ${endDate}`);
+            }
             updatedIcal = updatedIcal.replace(
               /DTEND:.*\r?\n/,
               `DTEND:${formatICalDate(end)}\r\n`
@@ -448,14 +484,30 @@ function formatICalDate(date: Date): string {
 }
 
 async function main() {
-  const configFromEnv = {
-    username: process.env.FASTMAIL_USERNAME || "",
-    appPassword: process.env.FASTMAIL_APP_PASSWORD || "",
-  };
+  let server;
 
-  const server = createServer({ config: configFromEnv });
+  if (process.env.FASTMAIL_USERNAME && process.env.FASTMAIL_APP_PASSWORD) {
+    const configFromEnv = {
+      username: process.env.FASTMAIL_USERNAME,
+      appPassword: process.env.FASTMAIL_APP_PASSWORD,
+    };
+    server = createServer({ config: configFromEnv });
+  } else {
+    console.error(
+      "Warning: FASTMAIL_USERNAME and FASTMAIL_APP_PASSWORD environment variables not set."
+    );
+    console.error(
+      "Server will start but calendar operations will fail until configured by MCP client."
+    );
+    server = createServer({
+      config: {
+        username: "placeholder@example.com",
+        appPassword: "1234567890123456",
+      },
+    });
+  }
+
   const transport = new StdioServerTransport();
-
   await server.connect(transport);
   console.error("Fastmail Calendar MCP server running on stdio");
 }

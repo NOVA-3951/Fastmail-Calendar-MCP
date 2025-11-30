@@ -19,7 +19,6 @@
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.4",
-    "caldav-client": "^0.1.0",
     "tsdav": "^2.0.6",
     "zod": "^3.23.8"
   },
