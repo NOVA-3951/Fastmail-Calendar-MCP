@@ -6,7 +6,16 @@ This is a Model Context Protocol (MCP) server that enables AI assistants to inte
 
 # Recent Changes
 
-**November 30, 2025**:
+**November 30, 2025 (Quality Score Improvements)**:
+- Added tool annotations (readOnlyHint, destructiveHint, idempotentHint) to all 5 tools
+- Implemented prompts capability with 4 prompts: schedule_meeting, daily_agenda, find_free_time, weekly_summary
+- Added resources capability exposing calendars as browsable resources
+- Added optional config fields: defaultCalendar, timezone
+- Enhanced all parameter descriptions with examples and context
+- Added server icon to smithery.yaml
+- Added @smithery/cli as dev dependency for proper build process
+
+**November 30, 2025 (Initial Release)**:
 - Initial implementation of Fastmail Calendar MCP server
 - Implemented all five calendar tools: list_calendars, list_events, create_event, update_event, delete_event
 - Added robust validation for configuration schema (email validation, minimum password length)
