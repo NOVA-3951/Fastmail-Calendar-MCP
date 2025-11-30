@@ -14,13 +14,7 @@ export const configSchema = z.object({
 
 type Config = z.infer<typeof configSchema>;
 
-interface McpServerOptions {
-  config?: Record<string, unknown>;
-}
-
-function createServer(options: McpServerOptions = {}) {
-  const rawConfig = options.config || {};
-  const config = configSchema.parse(rawConfig);
+function createServer({ config }: { config: Config }) {
 
   const server = new Server(
     {
@@ -483,38 +477,32 @@ function formatICalDate(date: Date): string {
     .replace(/\.\d{3}/, "");
 }
 
-async function main() {
-  let server;
+export default createServer;
 
-  if (process.env.FASTMAIL_USERNAME && process.env.FASTMAIL_APP_PASSWORD) {
-    const configFromEnv = {
-      username: process.env.FASTMAIL_USERNAME,
-      appPassword: process.env.FASTMAIL_APP_PASSWORD,
-    };
-    server = createServer({ config: configFromEnv });
-  } else {
+if (typeof process !== "undefined" && process.argv[1]?.endsWith("index.js")) {
+  const config = {
+    username: process.env.FASTMAIL_USERNAME || "",
+    appPassword: process.env.FASTMAIL_APP_PASSWORD || "",
+  };
+
+  if (!config.username || !config.appPassword) {
     console.error(
-      "Warning: FASTMAIL_USERNAME and FASTMAIL_APP_PASSWORD environment variables not set."
+      "Error: FASTMAIL_USERNAME and FASTMAIL_APP_PASSWORD environment variables are required."
     );
     console.error(
-      "Server will start but calendar operations will fail until configured by MCP client."
+      "Set these environment variables or configure via MCP client."
     );
-    server = createServer({
-      config: {
-        username: "placeholder@example.com",
-        appPassword: "1234567890123456",
-      },
-    });
+    process.exit(1);
   }
 
+  const validatedConfig = configSchema.parse(config);
+  const server = createServer({ config: validatedConfig });
   const transport = new StdioServerTransport();
-  await server.connect(transport);
-  console.error("Fastmail Calendar MCP server running on stdio");
+
+  server.connect(transport).then(() => {
+    console.error("Fastmail Calendar MCP server running on stdio");
+  }).catch((error) => {
+    console.error("Fatal error:", error);
+    process.exit(1);
+  });
 }
-
-main().catch((error) => {
-  console.error("Fatal error in main():", error);
-  process.exit(1);
-});
-
-export default createServer;
