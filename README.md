@@ -1,5 +1,7 @@
 # Fastmail Calendar MCP Server
 
+[![smithery badge](https://smithery.ai/badge/@NOVA-3951/fastmail-calendar)](https://smithery.ai/server/@NOVA-3951/fastmail-calendar)
+
 An MCP (Model Context Protocol) server that enables AI assistants to interact with Fastmail Calendar via CalDAV. This allows AI to view, create, modify, and delete calendar events in your Fastmail account.
 
 ## Features
