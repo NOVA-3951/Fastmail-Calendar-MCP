@@ -6,10 +6,14 @@ This is a Model Context Protocol (MCP) server that enables AI assistants to inte
 
 # Recent Changes
 
+**December 5, 2025 (AI Assistant Improvements)**:
+- Improved tool descriptions with explicit workflow steps (STEP 1, STEP 2, PREREQUISITE)
+- Added clear guidance for AI to match user intent to calendar names (e.g., "work schedule" → "Work" calendar)
+- Removed resources capability (per-user data shouldn't be exposed as global resources)
+
 **November 30, 2025 (Quality Score Improvements)**:
 - Added tool annotations (readOnlyHint, destructiveHint, idempotentHint) to all 5 tools
 - Implemented prompts capability with 4 prompts: schedule_meeting, daily_agenda, find_free_time, weekly_summary
-- Added resources capability exposing calendars as browsable resources
 - Added optional config fields: defaultCalendar, timezone
 - Enhanced all parameter descriptions with examples and context
 - Added server icon to smithery.yaml

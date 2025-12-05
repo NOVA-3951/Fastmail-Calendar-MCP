@@ -5,8 +5,6 @@ import {
   ListToolsRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
-  ListResourcesRequestSchema,
-  ReadResourceRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from "tsdav";
@@ -31,7 +29,6 @@ function createServer({ config }: { config: Config }) {
       capabilities: {
         tools: {},
         prompts: {},
-        resources: {},
       },
     }
   );
@@ -180,77 +177,6 @@ Use list_calendars and list_events to fetch my events, then organize them by day
       default:
         throw new Error(`Unknown prompt: ${name}`);
     }
-  });
-
-  server.setRequestHandler(ListResourcesRequestSchema, async () => {
-    await initializeClient();
-    
-    return {
-      resources: calendars.map((cal) => ({
-        uri: `calendar://${encodeURIComponent(cal.url)}`,
-        name: cal.displayName || "Unnamed Calendar",
-        description: cal.description || `Calendar: ${cal.displayName}`,
-        mimeType: "application/json",
-      })),
-    };
-  });
-
-  server.setRequestHandler(ReadResourceRequestSchema, async (request) => {
-    const { uri } = request.params;
-    
-    await initializeClient();
-
-    if (uri.startsWith("calendar://")) {
-      const calendarUrl = decodeURIComponent(uri.replace("calendar://", ""));
-      const calendar = calendars.find((cal) => cal.url === calendarUrl);
-      
-      if (!calendar) {
-        throw new Error(`Calendar not found: ${calendarUrl}`);
-      }
-
-      const now = new Date();
-      const thirtyDaysLater = new Date(now);
-      thirtyDaysLater.setDate(thirtyDaysLater.getDate() + 30);
-
-      const calendarObjects = await davClient.fetchCalendarObjects({
-        calendar,
-        timeRange: {
-          start: now.toISOString(),
-          end: thirtyDaysLater.toISOString(),
-        },
-      });
-
-      const events = calendarObjects.map((obj: DAVCalendarObject) => ({
-        url: obj.url,
-        etag: obj.etag,
-        data: obj.data,
-      }));
-
-      return {
-        contents: [
-          {
-            uri,
-            mimeType: "application/json",
-            text: JSON.stringify({
-              calendar: {
-                displayName: calendar.displayName,
-                url: calendar.url,
-                description: calendar.description,
-                timezone: calendar.timezone,
-              },
-              events,
-              eventCount: events.length,
-              dateRange: {
-                start: now.toISOString(),
-                end: thirtyDaysLater.toISOString(),
-              },
-            }, null, 2),
-          },
-        ],
-      };
-    }
-
-    throw new Error(`Unknown resource URI: ${uri}`);
   });
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
