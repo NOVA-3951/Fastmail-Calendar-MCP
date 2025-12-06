@@ -10,10 +10,10 @@ import { z } from "zod";
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from "tsdav";
 
 export const configSchema = z.object({
-  username: z.string().email("Must be a valid email address").describe("Fastmail email address (e.g., user@fastmail.com)"),
-  appPassword: z.string().min(16, "App password must be at least 16 characters").describe("Fastmail app password (16 characters). Create one at Settings → Privacy & Security → Integrations → New app password"),
-  defaultCalendar: z.string().optional().describe("Default calendar name to use when not specified (optional)"),
-  timezone: z.string().optional().describe("Default timezone for events, e.g., 'America/New_York' (optional)"),
+  username: z.string().email("Must be a valid email address").optional().describe("REQUIRED - Your Fastmail email address (e.g., user@fastmail.com)"),
+  appPassword: z.string().min(16, "App password must be at least 16 characters").optional().describe("REQUIRED - Fastmail app password (16+ characters). Create at Settings → Privacy & Security → Integrations → New app password"),
+  defaultCalendar: z.string().optional().describe("Default calendar name to use when not specified"),
+  timezone: z.string().optional().describe("Default timezone for events, e.g., 'America/New_York'"),
 });
 
 type Config = {
