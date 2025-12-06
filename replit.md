@@ -6,6 +6,12 @@ This is a Model Context Protocol (MCP) server that enables AI assistants to inte
 
 # Recent Changes
 
+**December 6, 2025 (Test Mode & New Tool)**:
+- Added test mode: Use credentials `test`/`test` to authenticate without real Fastmail account
+- Test mode returns mock calendars and events for demo/scanning purposes
+- Added `get_event_details` tool for structured event data (parsed iCalendar)
+- Made username/appPassword required in config schema but allow test credentials
+
 **December 5, 2025 (AI Assistant Improvements)**:
 - Improved tool descriptions with explicit workflow steps (STEP 1, STEP 2, PREREQUISITE)
 - Added clear guidance for AI to match user intent to calendar names (e.g., "work schedule" → "Work" calendar)

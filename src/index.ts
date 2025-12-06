@@ -10,8 +10,8 @@ import { z } from "zod";
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from "tsdav";
 
 export const configSchema = z.object({
-  username: z.string().email("Must be a valid email address").optional().describe("REQUIRED - Your Fastmail email address (e.g., user@fastmail.com)"),
-  appPassword: z.string().min(16, "App password must be at least 16 characters").optional().describe("REQUIRED - Fastmail app password (16+ characters). Create at Settings → Privacy & Security → Integrations → New app password"),
+  username: z.string().describe("Your Fastmail email address (e.g., user@fastmail.com). Use 'test' for demo mode."),
+  appPassword: z.string().describe("Fastmail app password (16+ characters). Create at Settings → Privacy & Security → Integrations → New app password. Use 'test' for demo mode."),
   defaultCalendar: z.string().optional().describe("Default calendar name to use when not specified"),
   timezone: z.string().optional().describe("Default timezone for events, e.g., 'America/New_York'"),
 });
@@ -23,8 +23,55 @@ type Config = {
   timezone?: string;
 };
 
+const TEST_CREDENTIALS = { username: "test", password: "test" };
+
+const MOCK_CALENDARS = [
+  {
+    displayName: "Personal",
+    url: "https://caldav.fastmail.com/dav/calendars/user/demo@fastmail.com/personal/",
+    description: "Personal calendar for everyday events",
+    timezone: "America/New_York",
+  },
+  {
+    displayName: "Work",
+    url: "https://caldav.fastmail.com/dav/calendars/user/demo@fastmail.com/work/",
+    description: "Work meetings and deadlines",
+    timezone: "America/New_York",
+  },
+  {
+    displayName: "Family",
+    url: "https://caldav.fastmail.com/dav/calendars/user/demo@fastmail.com/family/",
+    description: "Family events and activities",
+    timezone: "America/New_York",
+  },
+];
+
+const MOCK_EVENTS = [
+  {
+    url: "https://caldav.fastmail.com/dav/calendars/user/demo@fastmail.com/personal/event1.ics",
+    etag: '"demo-etag-1"',
+    summary: "Team Standup",
+    description: "Daily sync meeting",
+    location: "Conference Room A",
+    startDate: new Date(Date.now() + 86400000).toISOString(),
+    endDate: new Date(Date.now() + 86400000 + 1800000).toISOString(),
+  },
+  {
+    url: "https://caldav.fastmail.com/dav/calendars/user/demo@fastmail.com/personal/event2.ics",
+    etag: '"demo-etag-2"',
+    summary: "Lunch with Client",
+    description: "Discuss Q1 goals",
+    location: "Downtown Cafe",
+    startDate: new Date(Date.now() + 172800000).toISOString(),
+    endDate: new Date(Date.now() + 172800000 + 3600000).toISOString(),
+  },
+];
+
 function createServer({ config }: { config?: Config } = {}) {
   const safeConfig = config || {};
+  
+  const isTestMode = safeConfig.username === TEST_CREDENTIALS.username && 
+                     safeConfig.appPassword === TEST_CREDENTIALS.password;
 
   const server = new Server(
     {
@@ -43,6 +90,10 @@ function createServer({ config }: { config?: Config } = {}) {
   let calendars: DAVCalendar[] = [];
 
   async function initializeClient() {
+    if (isTestMode) {
+      return null;
+    }
+    
     if (!safeConfig.username || !safeConfig.appPassword) {
       throw new Error("Fastmail credentials not configured. Please provide your Fastmail username (email) and app password in the MCP client configuration.");
     }
@@ -375,6 +426,21 @@ Use list_calendars and list_events to fetch my events, then organize them by day
 
       switch (name) {
         case "list_calendars": {
+          if (isTestMode) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    _testMode: true,
+                    _message: "Demo mode - showing sample calendars. Use real Fastmail credentials for actual data.",
+                    calendars: MOCK_CALENDARS,
+                  }, null, 2),
+                },
+              ],
+            };
+          }
+          
           const calendarList = calendars.map((cal) => ({
             displayName: cal.displayName,
             url: cal.url,
@@ -398,6 +464,21 @@ Use list_calendars and list_events to fetch my events, then organize them by day
             startDate: string;
             endDate: string;
           };
+
+          if (isTestMode) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    _testMode: true,
+                    _message: "Demo mode - showing sample events. Use real Fastmail credentials for actual data.",
+                    events: MOCK_EVENTS,
+                  }, null, 2),
+                },
+              ],
+            };
+          }
 
           const calendar = calendars.find((cal) => cal.url === calendarUrl);
           if (!calendar) {
@@ -440,6 +521,22 @@ Use list_calendars and list_events to fetch my events, then organize them by day
 
         case "get_event_details": {
           const { eventUrl } = args as { eventUrl: string };
+
+          if (isTestMode) {
+            const mockEvent = MOCK_EVENTS.find(e => e.url === eventUrl) || MOCK_EVENTS[0];
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    _testMode: true,
+                    _message: "Demo mode - showing sample event. Use real Fastmail credentials for actual data.",
+                    ...mockEvent,
+                  }, null, 2),
+                },
+              ],
+            };
+          }
 
           let existingEvent: DAVCalendarObject | undefined;
 
@@ -491,6 +588,28 @@ Use list_calendars and list_events to fetch my events, then organize them by day
             endDate: string;
             location?: string;
           };
+
+          if (isTestMode) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    _testMode: true,
+                    _message: "Demo mode - event creation simulated. No actual event was created. Use real Fastmail credentials to create events.",
+                    simulatedEvent: {
+                      summary,
+                      description,
+                      startDate,
+                      endDate,
+                      location,
+                      url: `https://caldav.fastmail.com/dav/calendars/user/demo@fastmail.com/personal/${Date.now()}.ics`,
+                    },
+                  }, null, 2),
+                },
+              ],
+            };
+          }
 
           const calendar = calendars.find((cal) => cal.url === calendarUrl);
           if (!calendar) {
@@ -563,6 +682,24 @@ Use list_calendars and list_events to fetch my events, then organize them by day
             endDate?: string;
             location?: string;
           };
+
+          if (isTestMode) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    _testMode: true,
+                    _message: "Demo mode - event update simulated. No actual changes were made. Use real Fastmail credentials to update events.",
+                    simulatedUpdate: {
+                      eventUrl,
+                      updatedFields: { summary, description, startDate, endDate, location },
+                    },
+                  }, null, 2),
+                },
+              ],
+            };
+          }
 
           let existingEvent: DAVCalendarObject | undefined;
 
@@ -666,6 +803,21 @@ Use list_calendars and list_events to fetch my events, then organize them by day
             eventUrl: string;
             etag: string;
           };
+
+          if (isTestMode) {
+            return {
+              content: [
+                {
+                  type: "text",
+                  text: JSON.stringify({
+                    _testMode: true,
+                    _message: "Demo mode - event deletion simulated. No actual event was deleted. Use real Fastmail credentials to delete events.",
+                    simulatedDelete: { eventUrl, etag },
+                  }, null, 2),
+                },
+              ],
+            };
+          }
 
           await davClient.deleteCalendarObject({
             calendarObject: {
