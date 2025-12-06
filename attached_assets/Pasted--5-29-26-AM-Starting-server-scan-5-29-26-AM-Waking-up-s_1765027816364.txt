@@ -1,0 +1,15 @@
+[5:29:26 AM] Starting server scan
+[5:29:26 AM] Waking up server...
+[5:29:27 AM] Setting up authentication...
+[5:29:27 AM] Using test profile configuration
+[5:29:35 AM] Server added to test profile
+[5:29:35 AM] Scanning MCP capabilities...
+[5:29:35 AM] MCP Server Card not found (notFound), proceeding with connection scan
+[5:29:35 AM] Discovered .well-known/mcp-config schema: {"title":"MCP Session Configuration","description":"Schema for the /mcp endpoint configuration","x-query-style":"dot+bracket","type":"object","properties":{"username":{"type":"string","format":"email","description":"Fastmail email address (e.g., user@fastmail.com)"},"appPassword":{"type":"string","minLength":16,"description":"Fastmail app password (16 characters). Create one at Settings → Privacy & Security → Integrations → New app password"},"defaultCalendar":{"type":"string","description":"Default calendar name to use when not specified (optional)"},"timezone":{"type":"string","description":"Default timezone for events, e.g., 'America/New_York' (optional)"}},"required":["username","appPassword"],"additionalProperties":false}
+[5:29:35 AM] Scanning MCP server: https://smithery.run/sessions/variable-earwig-c1ZHPa/fastmail-calendar/mcp
+[5:29:36 AM] HTTP POST → 401 Unauthorized (1541ms)
+{"error":"auth_required","authorizationUrl":"https://server.smithery.ai/@NOVA-3951/fastmail-calendar/auth/authorize?profile=variable-earwig-c1ZHPa&response_type=code&client_id=v4.local.jxxPHmVSnIXl11Z...
+[5:29:36 AM] Request: {"jsonrpc":"2.0","id":665650944,"method":"initialize","params":{"protocolVersion":"2024-11-05","capabilities":{},"clientInfo":{"name":"smithery-scanner","version":"1.0.0"}}}
+[5:29:36 AM] Saving discovered config schema: {"type":"object","properties":{"username":{"type":"string","description":"Fastmail email address (e.g., user@fastmail.com)"},"appPassword":{"type":"string","description":"Fastmail app password (16 characters). Create one at Settings → Privacy & Security → Integrations → New app password"},"defaultCalendar":{"type":"string","description":"Default calendar name to use when not specified (optional)"},"timezone":{"type":"string","description":"Default timezone for events, e.g., 'America/New_York' (optional)"}},"required":["username","appPassword"],"description":"Schema for the /mcp endpoint configuration"}
+[5:29:36 AM] Scan failed: Authentication failed during server scan. Click the authorize button to authenticate and continue with scan.
+  Cause: Unauthorized

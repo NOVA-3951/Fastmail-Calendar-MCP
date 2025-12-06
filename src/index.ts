@@ -23,7 +23,8 @@ type Config = {
   timezone?: string;
 };
 
-function createServer({ config }: { config: Config }) {
+function createServer({ config }: { config?: Config } = {}) {
+  const safeConfig = config || {};
 
   const server = new Server(
     {
@@ -42,7 +43,7 @@ function createServer({ config }: { config: Config }) {
   let calendars: DAVCalendar[] = [];
 
   async function initializeClient() {
-    if (!config.username || !config.appPassword) {
+    if (!safeConfig.username || !safeConfig.appPassword) {
       throw new Error("Fastmail credentials not configured. Please provide your Fastmail username (email) and app password in the MCP client configuration.");
     }
     
@@ -50,8 +51,8 @@ function createServer({ config }: { config: Config }) {
       davClient = await createDAVClient({
         serverUrl: "https://caldav.fastmail.com",
         credentials: {
-          username: config.username,
-          password: config.appPassword,
+          username: safeConfig.username,
+          password: safeConfig.appPassword,
         },
         authMethod: "Basic",
         defaultAccountType: "caldav",
