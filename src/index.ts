@@ -231,6 +231,27 @@ Use list_calendars and list_events to fetch my events, then organize them by day
         },
       },
       {
+        name: "get_event_details",
+        description: `Get parsed details of a specific event. PREREQUISITE: You must first call list_calendars, then list_events to get the eventUrl. Returns structured event data (title, start, end, location, description) instead of raw iCalendar format.`,
+        inputSchema: {
+          type: "object",
+          properties: {
+            eventUrl: {
+              type: "string",
+              description: "REQUIRED. The event URL from list_events output.",
+            },
+          },
+          required: ["eventUrl"],
+        },
+        annotations: {
+          title: "Get Event Details",
+          readOnlyHint: true,
+          destructiveHint: false,
+          idempotentHint: true,
+          openWorldHint: false,
+        },
+      },
+      {
         name: "create_event",
         description: `Create a new calendar event. PREREQUISITE: You must first call list_calendars to get the calendarUrl. Creates an event with the specified title, times, and optional description/location.`,
         inputSchema: {
@@ -406,6 +427,43 @@ Use list_calendars and list_events to fetch my events, then organize them by day
               {
                 type: "text",
                 text: JSON.stringify(events, null, 2),
+              },
+            ],
+          };
+        }
+
+        case "get_event_details": {
+          const { eventUrl } = args as { eventUrl: string };
+
+          let existingEvent: DAVCalendarObject | undefined;
+
+          for (const calendar of calendars) {
+            const events = await davClient.fetchCalendarObjects({
+              calendar,
+            });
+
+            existingEvent = events.find(
+              (e: DAVCalendarObject) => e.url === eventUrl
+            );
+
+            if (existingEvent) {
+              break;
+            }
+          }
+
+          if (!existingEvent) {
+            throw new Error(`Event not found: ${eventUrl}`);
+          }
+
+          const parsedEvent = parseICalEvent(existingEvent.data);
+          parsedEvent.url = existingEvent.url;
+          parsedEvent.etag = existingEvent.etag;
+
+          return {
+            content: [
+              {
+                type: "text",
+                text: JSON.stringify(parsedEvent, null, 2),
               },
             ],
           };
@@ -646,6 +704,57 @@ function formatICalDate(date: Date): string {
     .toISOString()
     .replace(/[-:]/g, "")
     .replace(/\.\d{3}/, "");
+}
+
+function parseICalDate(icalDate: string): string {
+  if (!icalDate) return "";
+  const cleaned = icalDate.replace(/[^0-9TZ]/g, "");
+  if (cleaned.length >= 15) {
+    const year = cleaned.substring(0, 4);
+    const month = cleaned.substring(4, 6);
+    const day = cleaned.substring(6, 8);
+    const hour = cleaned.substring(9, 11);
+    const minute = cleaned.substring(11, 13);
+    const second = cleaned.substring(13, 15);
+    return `${year}-${month}-${day}T${hour}:${minute}:${second}Z`;
+  } else if (cleaned.length >= 8) {
+    const year = cleaned.substring(0, 4);
+    const month = cleaned.substring(4, 6);
+    const day = cleaned.substring(6, 8);
+    return `${year}-${month}-${day}`;
+  }
+  return icalDate;
+}
+
+function parseICalEvent(icalData: string): Record<string, any> {
+  const result: Record<string, any> = {};
+  
+  const getField = (fieldName: string): string => {
+    const regex = new RegExp(`${fieldName}[^:]*:([^\\r\\n]+)`, "i");
+    const match = icalData.match(regex);
+    return match ? match[1].trim() : "";
+  };
+  
+  result.summary = getField("SUMMARY") || "Untitled Event";
+  result.description = getField("DESCRIPTION") || "";
+  result.location = getField("LOCATION") || "";
+  result.uid = getField("UID") || "";
+  
+  const dtstart = getField("DTSTART");
+  const dtend = getField("DTEND");
+  
+  result.startDate = parseICalDate(dtstart);
+  result.endDate = parseICalDate(dtend);
+  result.startDateRaw = dtstart;
+  result.endDateRaw = dtend;
+  
+  const status = getField("STATUS");
+  if (status) result.status = status;
+  
+  const organizer = getField("ORGANIZER");
+  if (organizer) result.organizer = organizer;
+  
+  return result;
 }
 
 export default createServer;
