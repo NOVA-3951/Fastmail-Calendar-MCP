@@ -10,8 +10,8 @@ import { z } from "zod";
 import { createDAVClient, DAVCalendar, DAVCalendarObject } from "tsdav";
 
 export const configSchema = z.object({
-  username: z.string().min(1, "Username is required").email("Must be a valid email address").describe("Fastmail email address (e.g., user@fastmail.com)"),
-  appPassword: z.string().min(16, "App password must be at least 16 characters").describe("Fastmail app password (16 characters). Create one at Settings → Privacy & Security → Integrations → New app password"),
+  username: z.string().email("Must be a valid email address").describe("Fastmail email address (e.g., user@fastmail.com)").optional(),
+  appPassword: z.string().min(16, "App password must be at least 16 characters").describe("Fastmail app password (16 characters). Create one at Settings → Privacy & Security → Integrations → New app password").optional(),
   defaultCalendar: z.string().optional().describe("Default calendar name to use when not specified (optional)"),
   timezone: z.string().optional().describe("Default timezone for events, e.g., 'America/New_York' (optional)"),
 });
@@ -37,6 +37,10 @@ function createServer({ config }: { config: Config }) {
   let calendars: DAVCalendar[] = [];
 
   async function initializeClient() {
+    if (!config.username || !config.appPassword) {
+      throw new Error("Fastmail credentials not configured. Please provide your Fastmail username (email) and app password in the MCP client configuration.");
+    }
+    
     if (!davClient) {
       davClient = await createDAVClient({
         serverUrl: "https://caldav.fastmail.com",
